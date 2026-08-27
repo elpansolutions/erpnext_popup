@@ -138,13 +138,11 @@ app_license = "mit"
 # ---------------
 # Hook on document methods and events
 
-# doc_events = {
-# 	"*": {
-# 		"on_update": "method",
-# 		"on_cancel": "method",
-# 		"on_trash": "method"
-# 	}
-# }
+doc_events = {
+	"Sales Invoice": {
+		"on_submit": "rrs_customizations.overrides.sales_invoice.auto_attach_pdf"
+	}
+}
 
 # Scheduled Tasks
 # ---------------
@@ -180,12 +178,9 @@ app_license = "mit"
 # 	"Task": "rrs_customizations.custom.task.CustomTaskMixin"
 # }
 
-# Overriding Methods
-# ------------------------------
-#
-# override_whitelisted_methods = {
-# 	"frappe.desk.doctype.event.event.get_events": "rrs_customizations.event.get_events"
-# }
+override_whitelisted_methods = {
+	"frappe.utils.print_format.download_pdf": "rrs_customizations.overrides.sales_invoice.download_pdf"
+}
 #
 # each overriding function accepts a `data` argument;
 # generated from the base implementation of the doctype dashboard,
