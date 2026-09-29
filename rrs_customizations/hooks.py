@@ -134,6 +134,8 @@ app_include_js = "/assets/rrs_customizations/js/rrs_customizations.js"
 # 	"Event": "frappe.desk.doctype.event.event.has_permission",
 # }
 
+after_migrate = "rrs_customizations.setup.after_migrate"
+
 # Document Events
 # ---------------
 # Hook on document methods and events
@@ -141,6 +143,9 @@ app_include_js = "/assets/rrs_customizations/js/rrs_customizations.js"
 doc_events = {
 	"Sales Invoice": {
 		"on_submit": "rrs_customizations.overrides.sales_invoice.auto_attach_pdf"
+	},
+	"Customer": {
+		"validate": "rrs_customizations.overrides.customer.sync_sales_person"
 	}
 }
 
