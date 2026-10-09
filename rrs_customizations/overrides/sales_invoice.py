@@ -3,6 +3,7 @@ import os
 import re
 import frappe
 from frappe import _
+from frappe.utils import flt
 from frappe.utils.pdf import get_pdf
 
 
@@ -242,6 +243,129 @@ def sync_sales_invoice_addresses(doc, method=None):
 
 	if doc.shipping_address_name and frappe.db.exists("Address", doc.shipping_address_name):
 		doc.shipping_address = render_address(doc.shipping_address_name)
+
+
+def get_saved_sales_invoice_qty(item_code, batch_no=None, warehouse=None, exclude_invoice=None):
+	"""
+	Returns total quantity of an item/batch reserved in saved (draft, docstatus=0)
+	Sales Invoices (excluding returns and optionally excluding a given invoice).
+	Includes both billed qty and custom_free_qty.
+	"""
+	if not item_code:
+		return 0.0
+
+	conditions = [
+		"si.docstatus = 0",
+		"si.is_return = 0",
+		"sii.item_code = %(item_code)s"
+	]
+	params = {"item_code": item_code}
+
+	if exclude_invoice:
+		conditions.append("si.name != %(exclude_invoice)s")
+		params["exclude_invoice"] = exclude_invoice
+
+	if batch_no:
+		conditions.append("(sii.batch_no = %(batch_no)s OR sii.custom_batch_id_all = %(batch_no)s)")
+		params["batch_no"] = batch_no
+
+	if warehouse:
+		conditions.append("sii.warehouse = %(warehouse)s")
+		params["warehouse"] = warehouse
+
+	query = f"""
+		SELECT 
+			SUM(
+				(COALESCE(sii.qty, 0) + COALESCE(sii.custom_free_qty, 0)) 
+				* COALESCE(sii.conversion_factor, 1.0)
+			) AS reserved_qty
+		FROM `tabSales Invoice Item` sii
+		INNER JOIN `tabSales Invoice` si ON sii.parent = si.name
+		WHERE {" AND ".join(conditions)}
+	"""
+	res = frappe.db.sql(query, params, as_dict=True)
+	return flt(res[0].reserved_qty) if res and res[0].reserved_qty else 0.0
+
+
+def validate_sales_invoice_stock(doc, method=None):
+	"""
+	Validates that quantities being billed in a Sales Invoice (including custom_free_qty)
+	do not exceed available stock after accounting for other saved (unsubmitted) Sales Invoices.
+	"""
+	if doc.is_return or doc.docstatus != 0 or not doc.update_stock:
+		return
+
+	requested_map = {}
+	row_map = {}
+	for row in doc.get("items", []):
+		if not row.item_code:
+			continue
+
+		is_stock_item = frappe.get_cached_value("Item", row.item_code, "is_stock_item")
+		if not is_stock_item:
+			continue
+
+		warehouse = row.warehouse or doc.set_warehouse
+		if not warehouse:
+			continue
+
+		batch_no = row.batch_no or row.get("custom_batch_id_all")
+		if batch_no and not frappe.db.exists("Batch", batch_no):
+			found = frappe.db.get_value("Batch", {"item": row.item_code, "custom_batch_id_all": batch_no}, "name")
+			if not found:
+				found = frappe.db.get_value("Batch", {"item": row.item_code, "batch_id": batch_no}, "name")
+			if found:
+				batch_no = found
+
+		key = (row.item_code, batch_no, warehouse)
+		req_qty = (flt(row.qty) + flt(row.get("custom_free_qty") or 0.0)) * flt(row.conversion_factor or 1.0)
+		requested_map[key] = requested_map.get(key, 0.0) + req_qty
+		if key not in row_map:
+			row_map[key] = row
+
+	for (item_code, batch_no, warehouse), total_requested in requested_map.items():
+		if total_requested <= 0:
+			continue
+
+		if batch_no:
+			from erpnext.stock.doctype.batch.batch import get_batch_qty
+			avail_stock = get_batch_qty(batch_no=batch_no, warehouse=warehouse, item_code=item_code)
+			if avail_stock is None:
+				avail_stock = flt(frappe.db.get_value("Batch", batch_no, "batch_qty") or 0.0)
+			avail_stock = flt(avail_stock)
+		else:
+			bin_data = frappe.db.get_value("Bin", {"item_code": item_code, "warehouse": warehouse}, ["actual_qty", "reserved_qty"], as_dict=True)
+			actual_qty = flt(bin_data.actual_qty) if bin_data else 0.0
+			reserved_qty = flt(bin_data.reserved_qty) if bin_data else 0.0
+			avail_stock = actual_qty - reserved_qty
+
+		other_draft_qty = get_saved_sales_invoice_qty(
+			item_code=item_code,
+			batch_no=batch_no,
+			warehouse=warehouse,
+			exclude_invoice=doc.name
+		)
+
+		effective_available = max(0.0, avail_stock - other_draft_qty)
+
+		if total_requested > effective_available:
+			row = row_map[(item_code, batch_no, warehouse)]
+			batch_str = f" for Batch {frappe.bold(batch_no)}" if batch_no else ""
+			msg = _(
+				"Row #{0}: Cannot bill {1} units of Item {2}{3} in Warehouse {4}. "
+				"Available quantity is only {5} units (Total stock: {6}, already reserved in other saved Sales Invoices: {7})."
+			).format(
+				row.idx,
+				frappe.bold(total_requested),
+				frappe.bold(item_code),
+				batch_str,
+				frappe.bold(warehouse),
+				frappe.bold(effective_available),
+				avail_stock,
+				other_draft_qty
+			)
+			frappe.throw(msg, title=_("Insufficient Stock in Saved Invoices"))
+
 
 
 
