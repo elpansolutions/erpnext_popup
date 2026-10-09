@@ -214,4 +214,35 @@ def download_pdf(
 	frappe.local.response.type = "pdf"
 
 
+def sync_sales_invoice_addresses(doc, method=None):
+	"""
+	Ensure unsubmitted Sales Invoices (docstatus == 0) always have their
+	address_display and shipping_address synced with the latest Address records.
+	Also auto-populates customer_address and shipping_address_name if missing.
+	"""
+	if doc.docstatus != 0:
+		return
+
+	from frappe.contacts.doctype.address.address import get_default_address, render_address
+	from erpnext.accounts.party import get_party_shipping_address
+
+	# 1. Billing Address
+	if not doc.customer_address and doc.customer:
+		doc.customer_address = get_default_address("Customer", doc.customer, "is_primary_address")
+
+	if doc.customer_address and frappe.db.exists("Address", doc.customer_address):
+		doc.address_display = render_address(doc.customer_address)
+		gstin = frappe.db.get_value("Address", doc.customer_address, "gstin")
+		if gstin:
+			doc.billing_address_gstin = gstin
+
+	# 2. Shipping Address
+	if not doc.shipping_address_name and doc.customer:
+		doc.shipping_address_name = get_party_shipping_address("Customer", doc.customer) or doc.customer_address
+
+	if doc.shipping_address_name and frappe.db.exists("Address", doc.shipping_address_name):
+		doc.shipping_address = render_address(doc.shipping_address_name)
+
+
+
 

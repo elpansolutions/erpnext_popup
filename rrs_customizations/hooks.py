@@ -142,6 +142,7 @@ after_migrate = "rrs_customizations.setup.after_migrate"
 
 doc_events = {
 	"Sales Invoice": {
+		"validate": "rrs_customizations.overrides.sales_invoice.sync_sales_invoice_addresses",
 		"on_submit": "rrs_customizations.overrides.sales_invoice.auto_attach_pdf"
 	},
 	"Customer": {
