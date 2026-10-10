@@ -26,7 +26,7 @@ app_license = "mit"
 
 # include js, css files in header of desk.html
 # app_include_css = "/assets/rrs_customizations/css/rrs_customizations.css"
-app_include_js = "/assets/rrs_customizations/js/rrs_customizations.js"
+app_include_js = "/assets/rrs_customizations/js/rrs_customizations.js?v=20261010_1"
 
 # include js, css files in header of web template
 # web_include_css = "/assets/rrs_customizations/css/rrs_customizations.css"
@@ -43,7 +43,10 @@ app_include_js = "/assets/rrs_customizations/js/rrs_customizations.js"
 # page_js = {"page" : "public/js/file.js"}
 
 # include js in doctype views
-# doctype_js = {"doctype" : "public/js/doctype.js"}
+doctype_js = {
+	"Sales Invoice": "public/js/invoice_list_indicator.js",
+	"Purchase Invoice": "public/js/invoice_list_indicator.js",
+}
 doctype_list_js = {
 	"Sales Invoice": "public/js/invoice_list_indicator.js",
 	"Purchase Invoice": "public/js/invoice_list_indicator.js",

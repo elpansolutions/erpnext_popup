@@ -62,12 +62,12 @@ frappe.provide("rrs_customizations");
 
 		const docstatus = doc.docstatus != null ? Number(doc.docstatus) : 0;
 
-		// 1. Cancelled -> darkgrey
+		// 1. Cancelled -> purple (visually distinct from Return which is gray)
 		if (docstatus === 2 || doc.status === "Cancelled") {
-			return [__("Cancelled", null, dt), "darkgrey", "docstatus,=,2"];
+			return [__("Cancelled", null, dt), "purple", "docstatus,=,2"];
 		}
 
-		// 2. Draft -> blue
+		// 2. Draft -> blue (distinct from Overdue which is red)
 		if (docstatus === 0 || doc.status === "Draft") {
 			return [__("Draft", null, dt), "blue", "docstatus,=,0"];
 		}
@@ -86,7 +86,12 @@ frappe.provide("rrs_customizations");
 			}
 		}
 
-		// 4. Status color mapping
+		// 4. Return -> gray
+		if (doc.status === "Return" || doc.status === "Credit Note Issued") {
+			return [__(doc.status, null, dt), "gray", "status,=," + doc.status];
+		}
+
+		// 5. Status color mapping
 		const status_colors = {
 			Paid: "green",
 			Unpaid: "orange",
@@ -95,9 +100,6 @@ frappe.provide("rrs_customizations");
 			"Partly Paid and Discounted": "yellow",
 			Overdue: "red",
 			"Overdue and Discounted": "red",
-			Return: "gray",
-			"Credit Note Issued": "gray",
-			"Debit Note Issued": "gray",
 			"Internal Transfer": "darkgrey",
 		};
 
@@ -114,30 +116,31 @@ frappe.provide("rrs_customizations");
 
 	rrs_customizations.get_invoice_status_indicator = get_invoice_status_indicator;
 
-	// Patch frappe.get_indicator globally so List, Form, Kanban, and Report views use the custom scheme
-	if (frappe.get_indicator) {
-		const orig_get_indicator = frappe.get_indicator;
-		frappe.get_indicator = function (doc, doctype, show_workflow_state) {
-			const custom = get_invoice_status_indicator(doc, doctype);
-			if (custom) return custom;
-			return orig_get_indicator.apply(this, arguments);
-		};
+	function patch_indicators() {
+		if (frappe.get_indicator && !frappe.get_indicator.__rrs_patched) {
+			const orig_get_indicator = frappe.get_indicator;
+			frappe.get_indicator = function (doc, doctype, show_workflow_state) {
+				const custom = get_invoice_status_indicator(doc, doctype);
+				if (custom) return custom;
+				return orig_get_indicator.apply(this, arguments);
+			};
+			frappe.get_indicator.__rrs_patched = true;
+		}
+
+		["Sales Invoice", "Purchase Invoice"].forEach(function (dt) {
+			frappe.listview_settings = frappe.listview_settings || {};
+			frappe.listview_settings[dt] = frappe.listview_settings[dt] || {};
+			frappe.listview_settings[dt].has_indicator_for_draft = true;
+			frappe.listview_settings[dt].has_indicator_for_cancelled = true;
+			frappe.listview_settings[dt].get_indicator = function (doc) {
+				return get_invoice_status_indicator(doc, dt);
+			};
+		});
 	}
 
-	// Configure listview settings for both doctypes
-	["Sales Invoice", "Purchase Invoice"].forEach(function (dt) {
-		frappe.listview_settings = frappe.listview_settings || {};
-		const existing = frappe.listview_settings[dt] || {};
-		frappe.listview_settings[dt] = Object.assign(existing, {
-			has_indicator_for_draft: true,
-			has_indicator_for_cancelled: true,
-			get_indicator: function (doc) {
-				return (
-					get_invoice_status_indicator(doc, dt) ||
-					(existing.get_indicator ? existing.get_indicator(doc) : null)
-				);
-			},
-		});
-	});
+	patch_indicators();
+	$(document).ready(patch_indicators);
+	$(document).on("page-change", patch_indicators);
 })();
+
 
