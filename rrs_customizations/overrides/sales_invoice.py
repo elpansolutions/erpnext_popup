@@ -411,7 +411,15 @@ def validate_sales_invoice_stock(doc, method=None):
 			frappe.throw(msg, title=_("Insufficient Stock in Saved Documents"))
 
 
+def update_doc_total_qty(doc, method=None):
+	"""
+	Ensures Total Quantity on Sales Invoice and Delivery Note includes both billed qty and custom_free_qty.
+	"""
+	if not doc.get("items"):
+		return
 
+	tot_qty = 0.0
+	for item in doc.get("items", []):
+		tot_qty += flt(item.qty) + flt(item.get("custom_free_qty") or 0.0)
 
-
-
+	doc.total_qty = tot_qty

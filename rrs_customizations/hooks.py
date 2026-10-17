@@ -152,15 +152,19 @@ doc_events = {
 	"Sales Invoice": {
 		"validate": [
 			"rrs_customizations.overrides.sales_invoice.sync_sales_invoice_addresses",
-			"rrs_customizations.overrides.sales_invoice.validate_sales_invoice_stock"
+			"rrs_customizations.overrides.sales_invoice.validate_sales_invoice_stock",
+			"rrs_customizations.overrides.sales_invoice.update_doc_total_qty"
 		],
+		"before_save": "rrs_customizations.overrides.sales_invoice.update_doc_total_qty",
 		"on_submit": "rrs_customizations.overrides.sales_invoice.auto_attach_pdf"
 	},
 	"Delivery Note": {
 		"validate": [
 			"rrs_customizations.overrides.sales_invoice.sync_sales_invoice_addresses",
-			"rrs_customizations.overrides.sales_invoice.validate_sales_invoice_stock"
+			"rrs_customizations.overrides.sales_invoice.validate_sales_invoice_stock",
+			"rrs_customizations.overrides.sales_invoice.update_doc_total_qty"
 		],
+		"before_save": "rrs_customizations.overrides.sales_invoice.update_doc_total_qty",
 		"on_submit": "rrs_customizations.overrides.sales_invoice.auto_attach_pdf"
 	},
 	"Customer": {
