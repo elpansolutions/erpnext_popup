@@ -52,7 +52,7 @@ frappe.provide("rrs_customizations");
 (function () {
 	function get_invoice_status_indicator(doc, doctype) {
 		const dt = doctype || (doc && doc.doctype);
-		if (!doc || !dt || (dt !== "Sales Invoice" && dt !== "Purchase Invoice")) {
+		if (!doc || !dt || (dt !== "Sales Invoice" && dt !== "Purchase Invoice" && dt !== "Delivery Note")) {
 			return null;
 		}
 
@@ -101,6 +101,9 @@ frappe.provide("rrs_customizations");
 			Overdue: "red",
 			"Overdue and Discounted": "red",
 			"Internal Transfer": "darkgrey",
+			"To Bill": "orange",
+			Completed: "green",
+			Closed: "darkgrey",
 		};
 
 		if (doc.status && status_colors[doc.status]) {
@@ -120,14 +123,17 @@ frappe.provide("rrs_customizations");
 		if (frappe.get_indicator && !frappe.get_indicator.__rrs_patched) {
 			const orig_get_indicator = frappe.get_indicator;
 			frappe.get_indicator = function (doc, doctype, show_workflow_state) {
-				const custom = get_invoice_status_indicator(doc, doctype);
-				if (custom) return custom;
+				const dt = doctype || (doc && doc.doctype);
+				if (dt === "Sales Invoice" || dt === "Purchase Invoice" || dt === "Delivery Note") {
+					const custom = get_invoice_status_indicator(doc, doctype);
+					if (custom) return custom;
+				}
 				return orig_get_indicator.apply(this, arguments);
 			};
 			frappe.get_indicator.__rrs_patched = true;
 		}
 
-		["Sales Invoice", "Purchase Invoice"].forEach(function (dt) {
+		["Sales Invoice", "Purchase Invoice", "Delivery Note"].forEach(function (dt) {
 			frappe.listview_settings = frappe.listview_settings || {};
 			frappe.listview_settings[dt] = frappe.listview_settings[dt] || {};
 			frappe.listview_settings[dt].has_indicator_for_draft = true;

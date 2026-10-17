@@ -46,10 +46,12 @@ app_include_js = "/assets/rrs_customizations/js/rrs_customizations.js?v=20261010
 doctype_js = {
 	"Sales Invoice": "public/js/invoice_list_indicator.js",
 	"Purchase Invoice": "public/js/invoice_list_indicator.js",
+	"Delivery Note": "public/js/invoice_list_indicator.js",
 }
 doctype_list_js = {
 	"Sales Invoice": "public/js/invoice_list_indicator.js",
 	"Purchase Invoice": "public/js/invoice_list_indicator.js",
+	"Delivery Note": "public/js/invoice_list_indicator.js",
 }
 # doctype_tree_js = {"doctype" : "public/js/doctype_tree.js"}
 # doctype_calendar_js = {"doctype" : "public/js/doctype_calendar.js"}
@@ -148,6 +150,13 @@ after_migrate = "rrs_customizations.setup.after_migrate"
 
 doc_events = {
 	"Sales Invoice": {
+		"validate": [
+			"rrs_customizations.overrides.sales_invoice.sync_sales_invoice_addresses",
+			"rrs_customizations.overrides.sales_invoice.validate_sales_invoice_stock"
+		],
+		"on_submit": "rrs_customizations.overrides.sales_invoice.auto_attach_pdf"
+	},
+	"Delivery Note": {
 		"validate": [
 			"rrs_customizations.overrides.sales_invoice.sync_sales_invoice_addresses",
 			"rrs_customizations.overrides.sales_invoice.validate_sales_invoice_stock"

@@ -103,28 +103,24 @@ def get_pdf_options(html=""):
 
 def auto_attach_pdf(doc, method=None):
 	"""
-	Automatically generates and stores/attaches the Sales Invoice PDF
-	into ERPNext Attachments with the invoice number (doc.name) as the file name.
-
-	- Works in both Dev and Prod naming conventions (uses doc.name dynamically).
-	- Dynamically detects the default or configured print format.
-	- Inlines images as base64 for 100% reliable offline PDF rendering.
-	- Generates in Landscape A4 format so all tables fit perfectly.
-	- Runs server-side on submission without interfering with client scripts.
+	Automatically generates and stores/attaches the PDF
+	into ERPNext Attachments with the document number (doc.name) as the file name.
+	Supports Sales Invoice and Delivery Note.
 	"""
 	if isinstance(doc, str):
-		doc = frappe.get_doc("Sales Invoice", doc)
+		return
 
 	if doc.docstatus != 1:
 		return
 
+	dt = doc.doctype
 	file_name = f"{doc.name}.pdf"
 
 	# Avoid duplicate attachments
 	if frappe.db.exists(
 		"File",
 		{
-			"attached_to_doctype": "Sales Invoice",
+			"attached_to_doctype": dt,
 			"attached_to_name": doc.name,
 			"file_name": file_name,
 		},
@@ -137,15 +133,15 @@ def auto_attach_pdf(doc, method=None):
 			doc.get("print_format")
 			or frappe.db.get_value(
 				"Property Setter",
-				{"doc_type": "Sales Invoice", "property": "default_print_format"},
+				{"doc_type": dt, "property": "default_print_format"},
 				"value",
 			)
-			or frappe.get_meta("Sales Invoice").default_print_format
-			or "v5"
+			or frappe.get_meta(dt).default_print_format
+			or ("v5" if dt == "Sales Invoice" else "Delivery Note Standard")
 		)
 
 		html = frappe.get_print(
-			doctype="Sales Invoice",
+			doctype=dt,
 			name=doc.name,
 			print_format=print_format,
 			as_pdf=False,
@@ -159,7 +155,7 @@ def auto_attach_pdf(doc, method=None):
 			{
 				"doctype": "File",
 				"file_name": file_name,
-				"attached_to_doctype": "Sales Invoice",
+				"attached_to_doctype": dt,
 				"attached_to_name": doc.name,
 				"content": pdf_content,
 				"is_private": 1,
@@ -217,7 +213,7 @@ def download_pdf(
 
 def sync_sales_invoice_addresses(doc, method=None):
 	"""
-	Ensure unsubmitted Sales Invoices (docstatus == 0) always have their
+	Ensure unsubmitted Sales Invoices and Delivery Notes (docstatus == 0) always have their
 	address_display and shipping_address synced with the latest Address records.
 	Also auto-populates customer_address and shipping_address_name if missing.
 	"""
@@ -234,7 +230,7 @@ def sync_sales_invoice_addresses(doc, method=None):
 	if doc.customer_address and frappe.db.exists("Address", doc.customer_address):
 		doc.address_display = render_address(doc.customer_address)
 		gstin = frappe.db.get_value("Address", doc.customer_address, "gstin")
-		if gstin:
+		if gstin and hasattr(doc, "billing_address_gstin"):
 			doc.billing_address_gstin = gstin
 
 	# 2. Shipping Address
@@ -245,35 +241,38 @@ def sync_sales_invoice_addresses(doc, method=None):
 		doc.shipping_address = render_address(doc.shipping_address_name)
 
 
-def get_saved_sales_invoice_qty(item_code, batch_no=None, warehouse=None, exclude_invoice=None):
+def get_saved_sales_invoice_qty(item_code, batch_no=None, warehouse=None, exclude_invoice=None, exclude_doctype=None):
 	"""
 	Returns total quantity of an item/batch reserved in saved (draft, docstatus=0)
-	Sales Invoices (excluding returns and optionally excluding a given invoice).
+	Sales Invoices and Delivery Notes (excluding returns and optionally excluding a given document).
 	Includes both billed qty and custom_free_qty.
 	"""
 	if not item_code:
 		return 0.0
 
-	conditions = [
+	total_reserved = 0.0
+
+	# 1. Draft Sales Invoices
+	si_conditions = [
 		"si.docstatus = 0",
 		"si.is_return = 0",
 		"sii.item_code = %(item_code)s"
 	]
-	params = {"item_code": item_code}
+	si_params = {"item_code": item_code}
 
-	if exclude_invoice:
-		conditions.append("si.name != %(exclude_invoice)s")
-		params["exclude_invoice"] = exclude_invoice
+	if exclude_invoice and (not exclude_doctype or exclude_doctype == "Sales Invoice"):
+		si_conditions.append("si.name != %(exclude_invoice)s")
+		si_params["exclude_invoice"] = exclude_invoice
 
 	if batch_no:
-		conditions.append("(sii.batch_no = %(batch_no)s OR sii.custom_batch_id_all = %(batch_no)s)")
-		params["batch_no"] = batch_no
+		si_conditions.append("(sii.batch_no = %(batch_no)s OR sii.custom_batch_id_all = %(batch_no)s)")
+		si_params["batch_no"] = batch_no
 
 	if warehouse:
-		conditions.append("sii.warehouse = %(warehouse)s")
-		params["warehouse"] = warehouse
+		si_conditions.append("sii.warehouse = %(warehouse)s")
+		si_params["warehouse"] = warehouse
 
-	query = f"""
+	si_query = f"""
 		SELECT 
 			SUM(
 				(COALESCE(sii.qty, 0) + COALESCE(sii.custom_free_qty, 0)) 
@@ -281,18 +280,58 @@ def get_saved_sales_invoice_qty(item_code, batch_no=None, warehouse=None, exclud
 			) AS reserved_qty
 		FROM `tabSales Invoice Item` sii
 		INNER JOIN `tabSales Invoice` si ON sii.parent = si.name
-		WHERE {" AND ".join(conditions)}
+		WHERE {" AND ".join(si_conditions)}
 	"""
-	res = frappe.db.sql(query, params, as_dict=True)
-	return flt(res[0].reserved_qty) if res and res[0].reserved_qty else 0.0
+	res_si = frappe.db.sql(si_query, si_params, as_dict=True)
+	if res_si and res_si[0].reserved_qty:
+		total_reserved += flt(res_si[0].reserved_qty)
+
+	# 2. Draft Delivery Notes
+	dn_conditions = [
+		"dn.docstatus = 0",
+		"dn.is_return = 0",
+		"dni.item_code = %(item_code)s"
+	]
+	dn_params = {"item_code": item_code}
+
+	if exclude_invoice and (not exclude_doctype or exclude_doctype == "Delivery Note"):
+		dn_conditions.append("dn.name != %(exclude_invoice)s")
+		dn_params["exclude_invoice"] = exclude_invoice
+
+	if batch_no:
+		dn_conditions.append("(dni.batch_no = %(batch_no)s OR dni.custom_batch_id_all = %(batch_no)s)")
+		dn_params["batch_no"] = batch_no
+
+	if warehouse:
+		dn_conditions.append("dni.warehouse = %(warehouse)s")
+		dn_params["warehouse"] = warehouse
+
+	dn_query = f"""
+		SELECT 
+			SUM(
+				(COALESCE(dni.qty, 0) + COALESCE(dni.custom_free_qty, 0)) 
+				* COALESCE(dni.conversion_factor, 1.0)
+			) AS reserved_qty
+		FROM `tabDelivery Note Item` dni
+		INNER JOIN `tabDelivery Note` dn ON dni.parent = dn.name
+		WHERE {" AND ".join(dn_conditions)}
+	"""
+	res_dn = frappe.db.sql(dn_query, dn_params, as_dict=True)
+	if res_dn and res_dn[0].reserved_qty:
+		total_reserved += flt(res_dn[0].reserved_qty)
+
+	return total_reserved
 
 
 def validate_sales_invoice_stock(doc, method=None):
 	"""
-	Validates that quantities being billed in a Sales Invoice (including custom_free_qty)
-	do not exceed available stock after accounting for other saved (unsubmitted) Sales Invoices.
+	Validates that quantities being billed/delivered in a Sales Invoice or Delivery Note (including custom_free_qty)
+	do not exceed available stock after accounting for other saved (unsubmitted) Sales Invoices & Delivery Notes.
 	"""
-	if doc.is_return or doc.docstatus != 0 or not doc.update_stock:
+	if doc.is_return or doc.docstatus != 0:
+		return
+
+	if doc.doctype == "Sales Invoice" and not doc.update_stock:
 		return
 
 	requested_map = {}
@@ -343,7 +382,8 @@ def validate_sales_invoice_stock(doc, method=None):
 			item_code=item_code,
 			batch_no=batch_no,
 			warehouse=warehouse,
-			exclude_invoice=doc.name
+			exclude_invoice=doc.name,
+			exclude_doctype=doc.doctype
 		)
 
 		effective_available = max(0.0, avail_stock - other_draft_qty)
@@ -351,20 +391,25 @@ def validate_sales_invoice_stock(doc, method=None):
 		if total_requested > effective_available:
 			row = row_map[(item_code, batch_no, warehouse)]
 			batch_str = f" for Batch {frappe.bold(batch_no)}" if batch_no else ""
+			action_verb = "deliver" if doc.doctype == "Delivery Note" else "bill"
+			doc_type_label = "Delivery Notes & Sales Invoices"
 			msg = _(
-				"Row #{0}: Cannot bill {1} units of Item {2}{3} in Warehouse {4}. "
-				"Available quantity is only {5} units (Total stock: {6}, already reserved in other saved Sales Invoices: {7})."
+				"Row #{0}: Cannot {1} {2} units of Item {3}{4} in Warehouse {5}. "
+				"Available quantity is only {6} units (Total stock: {7}, already reserved in other saved {8}: {9})."
 			).format(
 				row.idx,
+				action_verb,
 				frappe.bold(total_requested),
 				frappe.bold(item_code),
 				batch_str,
 				frappe.bold(warehouse),
 				frappe.bold(effective_available),
 				avail_stock,
+				doc_type_label,
 				other_draft_qty
 			)
-			frappe.throw(msg, title=_("Insufficient Stock in Saved Invoices"))
+			frappe.throw(msg, title=_("Insufficient Stock in Saved Documents"))
+
 
 
 
