@@ -137,7 +137,7 @@ def auto_attach_pdf(doc, method=None):
 				"value",
 			)
 			or frappe.get_meta(dt).default_print_format
-			or ("v5" if dt == "Sales Invoice" else "Delivery Note Standard")
+			or ("v5" if dt == "Sales Invoice" else ("v4 Delivery Note" if frappe.db.exists("Print Format", "v4 Delivery Note") else "Delivery Note Standard"))
 		)
 
 		html = frappe.get_print(
