@@ -2,7 +2,7 @@ frappe.provide("rrs_customizations");
 
 (function () {
 	const original_savesubmit = frappe.ui.form.Form.prototype.savesubmit;
-	const bypass_confirm_doctypes = ["Purchase Invoice", "Sales Invoice"];
+	const bypass_confirm_doctypes = ["Purchase Invoice", "Sales Invoice", "Delivery Note", "Purchase Receipt"];
 
 	frappe.ui.form.Form.prototype.savesubmit = function (btn, callback, on_error) {
 		const me = this;
@@ -52,7 +52,7 @@ frappe.provide("rrs_customizations");
 (function () {
 	function get_invoice_status_indicator(doc, doctype) {
 		const dt = doctype || (doc && doc.doctype);
-		if (!doc || !dt || (dt !== "Sales Invoice" && dt !== "Purchase Invoice" && dt !== "Delivery Note")) {
+		if (!doc || !dt || (dt !== "Sales Invoice" && dt !== "Purchase Invoice" && dt !== "Delivery Note" && dt !== "Purchase Receipt")) {
 			return null;
 		}
 
@@ -130,7 +130,7 @@ frappe.provide("rrs_customizations");
 			get: function () {
 				return function (doc, doctype, show_workflow_state) {
 					const dt = doctype || (doc && doc.doctype);
-					if (dt === "Sales Invoice" || dt === "Purchase Invoice" || dt === "Delivery Note") {
+					if (dt === "Sales Invoice" || dt === "Purchase Invoice" || dt === "Delivery Note" || dt === "Purchase Receipt") {
 						const custom = get_invoice_status_indicator(doc, dt);
 						if (custom) return custom;
 					}
@@ -148,7 +148,7 @@ frappe.provide("rrs_customizations");
 	}
 
 	function patch_listview_settings() {
-		["Sales Invoice", "Purchase Invoice", "Delivery Note"].forEach(function (dt) {
+		["Sales Invoice", "Purchase Invoice", "Delivery Note", "Purchase Receipt"].forEach(function (dt) {
 			frappe.listview_settings = frappe.listview_settings || {};
 			frappe.listview_settings[dt] = frappe.listview_settings[dt] || {};
 			frappe.listview_settings[dt].has_indicator_for_draft = true;

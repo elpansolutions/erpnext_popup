@@ -26,7 +26,7 @@ app_license = "mit"
 
 # include js, css files in header of desk.html
 # app_include_css = "/assets/rrs_customizations/css/rrs_customizations.css"
-app_include_js = "/assets/rrs_customizations/js/rrs_customizations.js?v=20261022_2"
+app_include_js = "/assets/rrs_customizations/js/rrs_customizations.js?v=20261022_3"
 
 # include js, css files in header of web template
 # web_include_css = "/assets/rrs_customizations/css/rrs_customizations.css"
@@ -47,11 +47,13 @@ doctype_js = {
 	"Sales Invoice": "public/js/invoice_list_indicator.js",
 	"Purchase Invoice": "public/js/invoice_list_indicator.js",
 	"Delivery Note": "public/js/invoice_list_indicator.js",
+	"Purchase Receipt": "public/js/invoice_list_indicator.js",
 }
 doctype_list_js = {
 	"Sales Invoice": "public/js/invoice_list_indicator.js",
 	"Purchase Invoice": "public/js/invoice_list_indicator.js",
 	"Delivery Note": "public/js/invoice_list_indicator.js",
+	"Purchase Receipt": "public/js/invoice_list_indicator.js",
 }
 # doctype_tree_js = {"doctype" : "public/js/doctype_tree.js"}
 # doctype_calendar_js = {"doctype" : "public/js/doctype_calendar.js"}
@@ -273,5 +275,6 @@ override_whitelisted_methods = {
 # Override DocType Class
 # ----------------------
 override_doctype_class = {
-	"Purchase Invoice": "rrs_customizations.overrides.purchase_invoice.RRSPurchaseInvoice"
+	"Purchase Invoice": "rrs_customizations.overrides.purchase_invoice.RRSPurchaseInvoice",
+	"Purchase Receipt": "rrs_customizations.overrides.purchase_receipt.RRSPurchaseReceipt",
 }

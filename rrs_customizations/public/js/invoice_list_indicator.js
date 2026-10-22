@@ -79,7 +79,7 @@ frappe.provide("rrs_customizations");
 			get: function () {
 				return function (doc, doctype, show_workflow_state) {
 					const dt = doctype || (doc && doc.doctype);
-					if (dt === "Sales Invoice" || dt === "Purchase Invoice" || dt === "Delivery Note") {
+					if (dt === "Sales Invoice" || dt === "Purchase Invoice" || dt === "Delivery Note" || dt === "Purchase Receipt") {
 						const custom = get_custom_invoice_indicator(doc, dt);
 						if (custom) return custom;
 					}
@@ -99,7 +99,7 @@ frappe.provide("rrs_customizations");
 	function apply_settings() {
 		setup_indicator_interceptor();
 
-		["Sales Invoice", "Purchase Invoice", "Delivery Note"].forEach(function (doctype) {
+		["Sales Invoice", "Purchase Invoice", "Delivery Note", "Purchase Receipt"].forEach(function (doctype) {
 			frappe.listview_settings[doctype] = frappe.listview_settings[doctype] || {};
 			frappe.listview_settings[doctype].has_indicator_for_draft = true;
 			frappe.listview_settings[doctype].has_indicator_for_cancelled = true;
