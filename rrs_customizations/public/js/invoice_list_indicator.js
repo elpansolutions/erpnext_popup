@@ -68,7 +68,37 @@ frappe.provide("rrs_customizations");
 
 	rrs_customizations.get_invoice_status_indicator = get_custom_invoice_indicator;
 
+	let _orig_get_indicator = frappe.get_indicator;
+
+	function setup_indicator_interceptor() {
+		if (frappe.__rrs_indicator_interceptor_set) return;
+
+		Object.defineProperty(frappe, "get_indicator", {
+			configurable: true,
+			enumerable: true,
+			get: function () {
+				return function (doc, doctype, show_workflow_state) {
+					const dt = doctype || (doc && doc.doctype);
+					if (dt === "Sales Invoice" || dt === "Purchase Invoice" || dt === "Delivery Note") {
+						const custom = get_custom_invoice_indicator(doc, dt);
+						if (custom) return custom;
+					}
+					if (typeof _orig_get_indicator === "function") {
+						return _orig_get_indicator.apply(this, arguments);
+					}
+				};
+			},
+			set: function (fn) {
+				_orig_get_indicator = fn;
+			},
+		});
+
+		frappe.__rrs_indicator_interceptor_set = true;
+	}
+
 	function apply_settings() {
+		setup_indicator_interceptor();
+
 		["Sales Invoice", "Purchase Invoice", "Delivery Note"].forEach(function (doctype) {
 			frappe.listview_settings[doctype] = frappe.listview_settings[doctype] || {};
 			frappe.listview_settings[doctype].has_indicator_for_draft = true;
@@ -77,20 +107,9 @@ frappe.provide("rrs_customizations");
 				return get_custom_invoice_indicator(doc, doctype);
 			};
 		});
-
-		if (frappe.get_indicator && !frappe.get_indicator.__rrs_patched) {
-			const orig = frappe.get_indicator;
-			frappe.get_indicator = function (doc, doctype, show_workflow_state) {
-				const dt = doctype || (doc && doc.doctype);
-				if (dt === "Sales Invoice" || dt === "Purchase Invoice" || dt === "Delivery Note") {
-					const custom = get_custom_invoice_indicator(doc, dt);
-					if (custom) return custom;
-				}
-				return orig.apply(this, arguments);
-			};
-			frappe.get_indicator.__rrs_patched = true;
-		}
 	}
 
 	apply_settings();
+	$(document).ready(apply_settings);
+	$(document).on("page-change", apply_settings);
 })();
