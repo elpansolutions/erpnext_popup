@@ -48,6 +48,7 @@ doctype_js = {
 	"Purchase Invoice": "public/js/invoice_list_indicator.js",
 	"Delivery Note": "public/js/invoice_list_indicator.js",
 	"Purchase Receipt": "public/js/invoice_list_indicator.js",
+	"GSTR-1": "public/js/gstr_1_rrs.js",
 }
 doctype_list_js = {
 	"Sales Invoice": "public/js/invoice_list_indicator.js",
