@@ -11,8 +11,10 @@ from india_compliance.gst_india.utils import (
     get_period,
     validate_gstin_permission,
 )
+from india_compliance.gst_india.utils.exporter import ExcelExporter
 from india_compliance.gst_india.utils.gstr_1 import (
     HSN_BIFURCATION_FROM,
+    JSON_CATEGORY_EXCEL_CATEGORY_MAPPING,
     GovJsonKey,
     GSTR1_SubCategory,
 )
@@ -29,7 +31,8 @@ class Gstr1RrsExcel(GovExcel):
     GSTR-1 Excel generator for RRS:
     - Sheet 'b2b,sez,de': Regular B2B rows PLUS invoice-wise B2B exempt/nil-rated rows (Rate = 0).
     - Sheet 'b2cs': Original India Compliance standard format (unchanged).
-    - Other sheets (exemp, hsn, docs, cdnr, etc.): Original India Compliance format (unchanged).
+    - Sheet 'exemp': Excluded from report per auditor requirements.
+    - Other sheets (hsn, docs, cdnr, etc.): Original India Compliance format (unchanged).
     """
 
     def generate(self, company_gstin: str, month_or_quarter: str, year: str, company: str | None = None):
@@ -51,7 +54,7 @@ class Gstr1RrsExcel(GovExcel):
         # 2. Extract invoice-wise B2B exempt/nil-rated invoices for registered persons
         exempt_b2b_invoices = self.extract_exempt_b2b_invoices(raw_books_data)
 
-        # 3. Apply standard India Compliance aggregation (aggregates B2CS and NIL_EXEMPT as in original report)
+        # 3. Apply standard India Compliance aggregation
         agg_data = GenerateGSTR1.get_aggregate_data(raw_books_data)
         raw_books_data.update(agg_data)
 
@@ -64,9 +67,51 @@ class Gstr1RrsExcel(GovExcel):
         b2b_data = processed_data.setdefault(GovJsonKey.B2B.value, [])
         self.append_exempt_to_b2b(b2b_data, exempt_b2b_invoices)
 
-        # 6. Build Excel workbook using standard GovExcel method
+        # 6. Exclude exemp category data
+        processed_data.pop(GovJsonKey.NIL_EXEMPT.value, None)
+
+        # 7. Build Excel workbook without exemp sheet
         filename = f"GSTR-1-RRS-{company_gstin}-{self.period}"
         self.build_excel(processed_data, file, filename=filename)
+
+    def build_excel(self, data, file=None, filename=None, sheet_names=None):
+        excel = ExcelExporter(file)
+
+        if excel.has_sheet("Sheet"):
+            excel.remove_sheet("Sheet")
+
+        # Exclude 'exemp' sheet per auditor requirements
+        if excel.has_sheet("exemp"):
+            excel.remove_sheet("exemp")
+
+        if sheet_names and excel.is_loaded:
+            self._filter_selected_section_sheets(excel, sheet_names)
+
+        for category, cat_data in data.items():
+            if category == GovJsonKey.NIL_EXEMPT.value:
+                continue
+
+            sheet_name = JSON_CATEGORY_EXCEL_CATEGORY_MAPPING.get(category)
+            if not sheet_name or sheet_name == "exemp":
+                continue
+
+            if excel.is_loaded and excel.has_sheet(sheet_name):
+                excel.insert_data(
+                    sheet_name=sheet_name,
+                    headers=self.get_category_headers(category),
+                    data=cat_data,
+                    start_row=5,
+                )
+            else:
+                excel.create_sheet(
+                    sheet_name=sheet_name or category,
+                    headers=self.get_category_headers(category),
+                    data=cat_data,
+                    add_totals=False,
+                    default_data_format={"height": 15},
+                )
+
+        excel.export(filename or f"GSTR-1-RRS-{self.gstin}-{self.period}")
 
     def get_unaggregated_books_data(self, company_gstin: str, month_or_quarter: str, year: str, company: str | None = None) -> dict:
         log_name = f"GSTR1-{self.period}-{company_gstin}"
