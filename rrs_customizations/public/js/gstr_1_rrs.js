@@ -13,44 +13,11 @@ frappe.ui.form.on("GSTR-1", {
 function setup_rrs_gstr1_actions(frm) {
     if (!frm) return;
 
-    // 1. Add primary custom button to the form header
+    // Add custom button ONLY at the top of the GSTR-1 form header
     frm.add_custom_button(__("Download GSTR-1 (RRS)"), () => {
         trigger_gstr1_rrs_download(frm);
     });
-
-    // Style the button slightly to make it easily recognizable by auditor
-    frm.page.set_inner_btn_group_as_primary?.(__("Download GSTR-1 (RRS)"));
-
-    // 2. Also inject into tab custom-button-group next to "Download Excel"
-    inject_tab_button(frm);
 }
-
-function inject_tab_button(frm) {
-    setTimeout(() => {
-        if (!frm?.$wrapper) return;
-        const button_groups = frm.$wrapper.find(".custom-button-group");
-        button_groups.each(function () {
-            const $grp = $(this);
-            if (!$grp.find(".btn-gstr1-rrs").length) {
-                $(`<button class="btn btn-default btn-gstr1-rrs ellipsis" style="margin-left: 8px;">
-                    ${__("Download Excel (RRS)")}
-                </button>`)
-                    .appendTo($grp)
-                    .on("click", (e) => {
-                        e.preventDefault();
-                        trigger_gstr1_rrs_download(frm);
-                    });
-            }
-        });
-    }, 400);
-}
-
-// Re-inject tab button on tab clicks
-$(document).on("click", ".nav-tabs .nav-link, .nav-pills .nav-link", function () {
-    if (cur_frm && cur_frm.doctype === "GSTR-1") {
-        inject_tab_button(cur_frm);
-    }
-});
 
 function trigger_gstr1_rrs_download(frm) {
     const doc = frm.doc;
