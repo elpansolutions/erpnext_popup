@@ -49,6 +49,7 @@ doctype_js = {
 	"Delivery Note": "public/js/invoice_list_indicator.js",
 	"Purchase Receipt": "public/js/invoice_list_indicator.js",
 	"GSTR-1": "public/js/gstr_1_rrs.js",
+	"Payment Entry": "public/js/payment_entry.js",
 }
 doctype_list_js = {
 	"Sales Invoice": "public/js/invoice_list_indicator.js",
@@ -172,6 +173,9 @@ doc_events = {
 	},
 	"Customer": {
 		"validate": "rrs_customizations.overrides.customer.sync_sales_person"
+	},
+	"Payment Entry": {
+		"validate": "rrs_customizations.overrides.payment_entry.validate_payment_entry"
 	}
 }
 
@@ -210,7 +214,9 @@ doc_events = {
 # }
 
 override_whitelisted_methods = {
-	"frappe.utils.print_format.download_pdf": "rrs_customizations.overrides.sales_invoice.download_pdf"
+	"frappe.utils.print_format.download_pdf": "rrs_customizations.overrides.sales_invoice.download_pdf",
+	"erpnext.accounts.doctype.payment_entry.payment_entry.get_outstanding_reference_documents": "rrs_customizations.overrides.payment_entry.get_outstanding_reference_documents",
+	"erpnext.accounts.doctype.payment_entry.payment_entry.get_reference_details": "rrs_customizations.overrides.payment_entry.get_reference_details",
 }
 #
 # each overriding function accepts a `data` argument;

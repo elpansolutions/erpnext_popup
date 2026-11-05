@@ -13,7 +13,18 @@ def setup_custom_fields():
 				"allow_in_quick_entry": 1,
 				"insert_after": "customer_name",
 			}
-		]
+		],
+		"Payment Entry Reference": [
+			{
+				"fieldname": "bill_date",
+				"label": "Supplier Invoice Date",
+				"fieldtype": "Date",
+				"in_list_view": 1,
+				"columns": 2,
+				"read_only": 1,
+				"insert_after": "bill_no",
+			}
+		],
 	}
 	create_custom_fields(custom_fields, update=True)
 
