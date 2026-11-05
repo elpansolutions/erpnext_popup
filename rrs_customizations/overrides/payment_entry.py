@@ -1,13 +1,25 @@
 import frappe
-from erpnext.accounts.doctype.payment_entry.payment_entry import (
-	get_outstanding_reference_documents as erpnext_get_outstanding_docs,
-	get_reference_details as erpnext_get_ref_details,
-)
+
+
+def _get_base_method(original_method_name: str, my_override: str):
+	"""
+	Return the previous override in the chain (e.g. India Compliance) or the original ERPNext method.
+	"""
+	overrides = frappe.get_hooks("override_whitelisted_methods", {}).get(original_method_name, [])
+	for override in reversed(overrides):
+		if override != my_override:
+			return frappe.get_attr(override)
+	return frappe.get_attr(original_method_name)
 
 
 @frappe.whitelist()
 def get_outstanding_reference_documents(args, validate=False):
-	data = erpnext_get_outstanding_docs(args, validate=validate)
+	method_name = "erpnext.accounts.doctype.payment_entry.payment_entry.get_outstanding_reference_documents"
+	base_fn = _get_base_method(
+		method_name,
+		"rrs_customizations.overrides.payment_entry.get_outstanding_reference_documents",
+	)
+	data = base_fn(args, validate=validate)
 	if not data:
 		return data
 
@@ -36,7 +48,12 @@ def get_outstanding_reference_documents(args, validate=False):
 def get_reference_details(
 	reference_doctype, reference_name, party_account_currency, party_type=None, party=None
 ):
-	res = erpnext_get_ref_details(
+	method_name = "erpnext.accounts.doctype.payment_entry.payment_entry.get_reference_details"
+	base_fn = _get_base_method(
+		method_name,
+		"rrs_customizations.overrides.payment_entry.get_reference_details",
+	)
+	res = base_fn(
 		reference_doctype,
 		reference_name,
 		party_account_currency,
