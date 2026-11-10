@@ -29,7 +29,7 @@ def get_outstanding_reference_documents(args, validate=False):
 		if d.get("voucher_type") == "Purchase Invoice" and d.get("voucher_no")
 	]
 	if pi_names:
-		bill_dates = dict(
+		pi_dates = dict(
 			frappe.get_all(
 				"Purchase Invoice",
 				filters={"name": ["in", pi_names]},
@@ -39,7 +39,7 @@ def get_outstanding_reference_documents(args, validate=False):
 		)
 		for d in data:
 			if d.get("voucher_type") == "Purchase Invoice":
-				d["bill_date"] = bill_dates.get(d.get("voucher_no"))
+				d["bill_date"] = pi_dates.get(d.get("voucher_no"))
 
 	return data
 
@@ -70,3 +70,37 @@ def validate_payment_entry(doc, method=None):
 	for ref in doc.get("references") or []:
 		if ref.reference_doctype == "Purchase Invoice" and ref.reference_name and not ref.get("bill_date"):
 			ref.bill_date = frappe.db.get_value("Purchase Invoice", ref.reference_name, "bill_date")
+
+
+from erpnext.accounts.doctype.payment_entry.payment_entry import PaymentEntry
+
+
+class RRSPaymentEntry(PaymentEntry):
+	@frappe.whitelist()
+	def allocate_amount_to_references(self, paid_amount, paid_amount_change, allocate_payment_amount):
+		res = super().allocate_amount_to_references(paid_amount, paid_amount_change, allocate_payment_amount)
+		self.set_bill_dates()
+		return res
+
+	def validate(self):
+		self.set_bill_dates()
+		super().validate()
+
+	def set_bill_dates(self):
+		pi_names = [
+			d.reference_name
+			for d in (self.references or [])
+			if d.reference_doctype == "Purchase Invoice" and d.reference_name and not d.bill_date
+		]
+		if pi_names:
+			bill_dates = dict(
+				frappe.get_all(
+					"Purchase Invoice",
+					filters={"name": ["in", pi_names]},
+					fields=["name", "bill_date"],
+					as_list=True,
+				)
+			)
+			for d in self.references:
+				if d.reference_doctype == "Purchase Invoice" and not d.bill_date:
+					d.bill_date = bill_dates.get(d.reference_name)

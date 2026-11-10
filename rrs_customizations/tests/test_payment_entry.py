@@ -24,10 +24,17 @@ def test():
     print("\n--- 2. Testing get_outstanding_reference_documents override (resolved by handler) ---")
     pi = frappe.db.get_value(
         "Purchase Invoice",
-        {"docstatus": 1},
+        {"docstatus": 1, "bill_date": ["is", "set"]},
         ["name", "supplier", "company", "credit_to", "bill_date", "bill_no", "outstanding_amount"],
         as_dict=True
     )
+    if not pi:
+        pi = frappe.db.get_value(
+            "Purchase Invoice",
+            {"docstatus": 1},
+            ["name", "supplier", "company", "credit_to", "bill_date", "bill_no", "outstanding_amount"],
+            as_dict=True
+        )
     print(f"Testing with Purchase Invoice: {pi.name}, supplier: {pi.supplier}, bill_date: {pi.bill_date}")
 
     args = {
@@ -43,9 +50,10 @@ def test():
     # Calling the overridden method as handler.py does
     docs = frappe.call(active_get_out, args=json.dumps(args))
     target = next((d for d in docs if d.get("voucher_no") == pi.name), None)
+    expected_date = pi.bill_date
     if target:
         print(f"Found {pi.name} in outstanding docs: bill_no={target.get('bill_no')}, bill_date={str(target.get('bill_date'))}")
-        assert str(target.get("bill_date")) == str(pi.bill_date), f"Expected bill_date {pi.bill_date}, got {target.get('bill_date')}"
+        assert target.get("bill_date") == expected_date or str(target.get("bill_date")) == str(expected_date), f"Expected bill_date {expected_date}, got {target.get('bill_date')}"
         print(f"reconciliation_status preserved: {target.get('reconciliation_status')}")
         print("PASS: get_outstanding_reference_documents returns bill_date and preserves previous overrides.")
     else:
@@ -56,6 +64,24 @@ def test():
                 assert "bill_date" in d, "bill_date missing from returned PI"
         print("PASS: all Purchase Invoices contain bill_date.")
 
+    # Also test an invoice without bill_date to ensure it remains blank/None
+    pi_no_bill = frappe.db.get_value(
+        "Purchase Invoice",
+        {"docstatus": 1, "bill_date": ("in", [None, ""])},
+        ["name", "supplier", "posting_date"],
+        as_dict=True
+    )
+    if pi_no_bill:
+        res_no_bill = frappe.call(
+            active_get_ref,
+            reference_doctype="Purchase Invoice",
+            reference_name=pi_no_bill.name,
+            party_account_currency="INR"
+        )
+        print(f"Blank test for PI without bill_date ({pi_no_bill.name}): {res_no_bill.get('bill_date')}")
+        assert not res_no_bill.get("bill_date"), f"Expected bill_date to be None/blank, got {res_no_bill.get('bill_date')}"
+        print("PASS: bill_date remains blank (None) when not set on Purchase Invoice.")
+
     print("\n--- 3. Testing get_reference_details override (resolved by handler) ---")
     ref_details = frappe.call(
         active_get_ref,
@@ -64,7 +90,7 @@ def test():
         party_account_currency="INR"
     )
     print(f"get_reference_details result: bill_no={ref_details.get('bill_no')}, bill_date={str(ref_details.get('bill_date'))}")
-    assert str(ref_details.get("bill_date")) == str(pi.bill_date), f"Expected bill_date {pi.bill_date}, got {ref_details.get('bill_date')}"
+    assert ref_details.get("bill_date") == expected_date or str(ref_details.get("bill_date")) == str(expected_date), f"Expected bill_date {expected_date}, got {ref_details.get('bill_date')}"
     print("PASS: get_reference_details returns bill_date.")
 
     print("\n--- 4. Testing Document Save and Database Persistence ---")
@@ -109,5 +135,24 @@ def test():
         pe.delete(ignore_permissions=True)
         frappe.db.commit()
         print("Test Payment Entry cleaned up successfully.")
+
+    print("\n--- 5. Testing RRSPaymentEntry.allocate_amount_to_references ---")
+    new_pe = frappe.new_doc("Payment Entry")
+    new_pe.payment_type = "Pay"
+    new_pe.party_type = "Supplier"
+    new_pe.party = pi.supplier
+    new_pe.company = pi.company
+    child = new_pe.append("references", {
+        "reference_doctype": "Purchase Invoice",
+        "reference_name": pi.name,
+        "total_amount": pi.outstanding_amount or 1000,
+        "outstanding_amount": pi.outstanding_amount or 1000,
+        "allocated_amount": 0
+    })
+    assert not child.bill_date, "bill_date should be None before allocation"
+    new_pe.allocate_amount_to_references(paid_amount=100, paid_amount_change=True, allocate_payment_amount=True)
+    print(f"After allocate_amount_to_references: child.bill_date = {child.bill_date}")
+    assert str(child.bill_date) == str(pi.bill_date), f"Expected bill_date {pi.bill_date}, got {child.bill_date}"
+    print("PASS: RRSPaymentEntry.allocate_amount_to_references correctly populates bill_date!")
 
     print("\nALL BACKEND AND DATABASE TESTS PASSED SUCCESSFULLY!")

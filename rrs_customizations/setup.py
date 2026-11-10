@@ -86,8 +86,49 @@ def unlock_transporter_fields():
 	frappe.db.commit()
 
 
+def sync_payment_entry_grid_settings():
+	"""
+	Ensure 'bill_date' is included in saved GridView column settings for Payment Entry Reference
+	so that existing users who previously configured columns can see Supplier Invoice Date.
+	"""
+	import json
+
+	settings = frappe.db.sql(
+		"SELECT user, data FROM `__UserSettings` WHERE doctype='Payment Entry'",
+		as_dict=True,
+	)
+	for s in settings:
+		try:
+			data = json.loads(s.data) if s.data else {}
+			grid_view = data.get("GridView", {})
+			cols = grid_view.get("Payment Entry Reference")
+			if isinstance(cols, list) and cols:
+				fieldnames = [c.get("fieldname") for c in cols if isinstance(c, dict)]
+				if "bill_date" not in fieldnames:
+					new_col = {"fieldname": "bill_date", "columns": 2, "sticky": 0}
+					insert_idx = -1
+					for target in ["bill_no", "due_date", "reference_name"]:
+						if target in fieldnames:
+							insert_idx = fieldnames.index(target)
+							break
+					if insert_idx != -1:
+						cols.insert(insert_idx + 1, new_col)
+					else:
+						cols.append(new_col)
+
+					frappe.db.sql(
+						"UPDATE `__UserSettings` SET data = %s WHERE user = %s AND doctype = 'Payment Entry'",
+						(json.dumps(data), s.user),
+					)
+		except Exception:
+			pass
+
+	frappe.clear_cache(doctype="Payment Entry")
+
+
 def after_migrate():
 	setup_custom_fields()
 	remove_quick_entry_from_sales_team()
 	unlock_transporter_fields()
+	sync_payment_entry_grid_settings()
 

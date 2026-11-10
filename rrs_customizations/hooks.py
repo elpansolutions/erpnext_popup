@@ -284,4 +284,5 @@ override_whitelisted_methods = {
 override_doctype_class = {
 	"Purchase Invoice": "rrs_customizations.overrides.purchase_invoice.RRSPurchaseInvoice",
 	"Purchase Receipt": "rrs_customizations.overrides.purchase_receipt.RRSPurchaseReceipt",
+	"Payment Entry": "rrs_customizations.overrides.payment_entry.RRSPaymentEntry",
 }
